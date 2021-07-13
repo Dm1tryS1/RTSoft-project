@@ -22,15 +22,11 @@ void recogniseStickersByThreshold(Mat &frame ,vector<vector<Point>> &vLine)
     convertScaleAbs(grad_x,abs_grad_y);
 
     addWeighted(abs_grad_x,0.5,abs_grad_y,0.5,0,frame);
-
-    
-
-
 }
 
 int main() 
 {
-    VideoCapture cap("1.mp4"); // open the video file for reading
+    VideoCapture cap("videos/1.mp4"); // open the video file for reading
     if ( !cap.isOpened() ) return -1;
     vector<vector<Point>> vLine;
     vector<Point> x;
