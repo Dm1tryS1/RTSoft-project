@@ -68,15 +68,16 @@ void Calibration()
     bool success;
 
     vector<String> images;
-    string path = "./images/*.jpg";
+    string path = "./images/";
     glob(path, images);
 
     for(int i=0; i<images.size(); i++)
     {
         frame = imread(images[i]);
         cvtColor(frame,gray,COLOR_BGR2GRAY);
-
+       
         success = findChessboardCorners(gray, Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE);
+        cout<<success;
         if(success)
         {
             TermCriteria criteria(TermCriteria::EPS | TermCriteria::COUNT, 30, 0.001);
@@ -87,11 +88,24 @@ void Calibration()
         
     }
     Mat cameraMatrix,distCoeffs,R,T;
-    //calibrateCamera(objpoints, imgpoints, Size(gray.rows,gray.cols), cameraMatrix, distCoeffs, R, T);
+    calibrateCamera(objpoints, imgpoints, Size(gray.rows,gray.cols), cameraMatrix, distCoeffs, R, T);
     cout << "Matrix: " << cameraMatrix << endl;
     cout << "distCoeffs: " << distCoeffs << endl;
     cout << "Rotation vector: " << R << endl;
     cout << "Translation vector: " << T << endl;
+    /*
+    Matrix: [274.9477906020705, 0, 156.7943303180268;
+             0, 265.2455166228537, 116.8951205319403;
+            0, 0, 1]
+
+    distCoeffs: [0.9448712363716593, -7.254062475783902, 0.003081024866213405, -0.01234221368372774, 16.10755230931382]
+
+    Rotation vector: [0.8225890837119171, 0.200801657748936, 1.481233673817779;
+                      -0.3563915604435743, -0.06668022224466785, 1.549252965240625]
+
+    Translation vector: [0.7999211377912586, -2.089669561979816, 7.324210820140504;
+                         3.595440533609318, -2.117629548995615, 12.96281473325609] 
+    */
 
 }
 
@@ -114,13 +128,12 @@ int main()
         bool flag =cap.read(frame);
         if (!flag) break;
 
-        //Point QRCenter;
-        //recogniseStickersByThreshold(frame,QRCenter);
+        Point QRCenter;
+        recogniseStickersByThreshold(frame,QRCenter);
         //cout << "x: " << QRCenter.x << " y: " << QRCenter.y << endl;
-        //sendConrolSignal(QRCenter, windowSize);
+        //ssendConrolSignal(QRCenter, windowSize);
 
-        //Calibration(frame);
-        //resize(frame,frame,windowSize);
+        resize(frame,frame,windowSize);
         imshow("MyVideo", frame); //show the frame in "MyVideo" window
         if(waitKey(30) == 27)  break;
     }
