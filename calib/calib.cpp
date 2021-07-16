@@ -77,7 +77,7 @@ void Calibration()
         cvtColor(frame,gray,COLOR_BGR2GRAY);
        
         success = findChessboardCorners(gray, Size(CHECKERBOARD[0], CHECKERBOARD[1]), corner_pts, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_FAST_CHECK | CALIB_CB_NORMALIZE_IMAGE);
-        cout<<success;
+        
         if(success)
         {
             TermCriteria criteria(TermCriteria::EPS | TermCriteria::COUNT, 30, 0.001);
