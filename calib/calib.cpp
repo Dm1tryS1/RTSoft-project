@@ -49,7 +49,7 @@ void sendConrolSignal(const Point &QRCenter, const Size windowSize)
 
 void Calibration()
 {
-    int CHECKERBOARD[2] = {7,7};
+    int CHECKERBOARD[2] = {6,9};
     //int criteria[3] = {TERM_CRITERIA_EPS + TERM_CRITERIA_MAX_ITER, 30, 0.001};
     // Создание вектора для хранения векторов 3D точек для каждого изображения шахматной доски
     vector<vector<Point3f>> objpoints; 
