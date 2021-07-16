@@ -18,6 +18,7 @@ cap = cv2.VideoCapture(0)
 
 while True:
     ret, img = cap.read()
+    print (img.shape)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     # Найти углы шахматной доски
     # Если на изображении найдено нужное количество углов, тогда ret = true
