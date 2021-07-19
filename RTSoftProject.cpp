@@ -6,30 +6,36 @@ using namespace std;
 
 //QR Square lenght = 78mm
 
-const size_t center_window_interval = 500;
-const Size windowSize(600, 600);
+const Size windowSize(480, 640);
 
-void recogniseStickersByThreshold(Mat &frame ,Rect &QRRect)
+vector<Point2d> trajectory_points;
+vector<Point> qrPlain; 
+RotatedRect QRRect;
+Point3f realPoint;
+
+void recogniseStickersByThreshold(Mat &frame)
 {
 
     Mat k = getStructuringElement(MORPH_RECT, Size(7,7));
 
     cv::Mat mask1(frame.size(),CV_8U);
     cvtColor(frame, mask1, COLOR_BGR2GRAY); 
-    threshold(mask1, mask1, 210, 255, THRESH_BINARY);
+    threshold(mask1, mask1, 220, 255, THRESH_BINARY);
     morphologyEx(mask1, mask1, MORPH_CLOSE, k, Point(-1, -1), 2);
 
     cv::Mat mask2(frame.size(),CV_8U);
     cvtColor(frame, mask2, COLOR_BGR2GRAY); 
-    //Canny(mask2, mask2, 60, 200);
     GaussianBlur(mask2, mask2, Size(9,9), 1.0);
+    //Canny(mask2, mask2, 70, 200);
+    //cornerHarris(mask2, mask2, 3,13, 0.07);
+    // threshold(mask2, mask2, 100, 255, THRESH_BINARY_INV);
     adaptiveThreshold(mask2, mask2, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 11,5);
-   // threshold(mask2, mask2, 100, 255, THRESH_BINARY_INV);
     morphologyEx(mask2, mask2, MORPH_CLOSE, k);
 
     cv::Mat mask(frame.size(),CV_8U);
     bitwise_and(mask1, mask2, mask);
-
+    mask = mask1;
+    
     vector<vector<Point>> contours; 
     vector<Vec4i> hierarchy;
     findContours(mask, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
@@ -47,10 +53,62 @@ void recogniseStickersByThreshold(Mat &frame ,Rect &QRRect)
     }
     if (biggest_contour != -1)
     {
-        QRRect = boundingRect(contours[biggest_contour]);
-        //rectangle(frame,QRRect, Scalar(0,255,255),2);
-        //drawContours(frame, contours, biggest_contour, Scalar(0 ,0, 255), 2);
+
+        QRRect = minAreaRect(contours[biggest_contour]);
+        //rectangle(frame,r, Scalar(0,255,255),2);
+        double epsilon = 0.01*arcLength(contours[biggest_contour], true);
+        approxPolyDP(contours[biggest_contour], contours[biggest_contour], epsilon, true);
+        //drawContours(frame, contours, biggest_contour, Scalar(0 ,255, 0), 2);
+        qrPlain = contours[biggest_contour];
+        
     }
+    //frame = mask;
+}
+
+void homo(Mat &frame)
+{
+    namedWindow("qr",WINDOW_AUTOSIZE);
+
+    Mat qr = imread("./calibrate/qr_front.png");
+    std::vector<cv::Point2f> imagePoints;
+    std::vector<cv::Point2f> objectPoints;
+   
+    if (qrPlain.empty())
+        return;
+    imagePoints.push_back(qrPlain[0]);
+    imagePoints.push_back(qrPlain[1]);
+    imagePoints.push_back(qrPlain[2]);
+    imagePoints.push_back(qrPlain[3]);
+    for (auto e : imagePoints)
+    {
+        circle(frame, e, 3, Scalar(0,0,255), FILLED);
+    }
+    circle(frame, imagePoints[0], 3, Scalar(255,0,0), FILLED);
+    objectPoints.push_back(Point2f(400, 0));
+    objectPoints.push_back(Point2f(400, 400*sqrt(2)));
+    objectPoints.push_back(Point2f(0, 400*sqrt(2)));
+    objectPoints.push_back(Point2f(0, 0));
+    Mat h = findHomography(imagePoints, objectPoints, RANSAC);
+    Mat img_perspective(frame.size(), CV_8UC3);
+    warpPerspective(frame, img_perspective,h, frame.size());
+    //Mat k ((Mat1d(3, 3) << -1, -1, -1, -1, 9, -1, -1, -1, -1));
+    //cvtColor(img_perspective, img_perspective, COLOR_BGR2GRAY);
+    //filter2D(img_perspective, img_perspective, -1, k);
+    //cv::GaussianBlur(img_perspective, img_perspective, cv::Size(0, 0), 11);
+   // Canny(img_perspective, img_perspective, 40, 120);
+  /*  std::vector<cv::Point2f> qrPoints;
+    QRCodeDetector detector;
+    detector.detect(img_perspective, qrPoints);
+    for (auto e : qrPoints)
+    {
+        circle(img_perspective, e, 3, Scalar(0,0,255), FILLED);
+    }
+    if (qrPoints.empty())
+        return;
+    circle(img_perspective, qrPoints[0], 3, Scalar(255,0,0), FILLED);
+*/
+    imshow("qr", img_perspective);
+
 }
 
 void sendConrolSignal(const Rect &QRRect, const Size windowSize)
@@ -61,7 +119,7 @@ void sendConrolSignal(const Rect &QRRect, const Size windowSize)
     cout << "x: " << QRCenter.x << " y: " << QRCenter.y << endl;
 }
 
-void getWorldCoordinates(Mat &frame ,Rect &QRRect)
+void getWorldCoordinates(Mat &frame)
 {
     Mat intrinsics ((Mat1d(3, 3) << 656.7382002, 0, 302.2583313, 
                                     0, 646.92684674, 247.13654762, 
@@ -80,15 +138,24 @@ void getWorldCoordinates(Mat &frame ,Rect &QRRect)
     }
     if (!imagePoints.empty())
         circle(frame, imagePoints[0], 3, Scalar(255,0,0), FILLED);
-        */
-    imagePoints.push_back(cv::Point2f(QRRect.x, QRRect.y));
+    */    
+    cv::Point2f imgPoints[4] = {Point2f(0, 0), Point2f(0, 0), Point2f(0, 0), Point2f(0, 0)};
+    QRRect.points(imgPoints);
+    if (imgPoints[0] == Point2f(0, 0))
+        return;
+    imagePoints.push_back(imgPoints[0]);
+    imagePoints.push_back(imgPoints[1]);
+    imagePoints.push_back(imgPoints[2]);
+    imagePoints.push_back(imgPoints[3]);
+/*    imagePoints.push_back(cv::Point2f(QRRect.x, QRRect.y));
     imagePoints.push_back(cv::Point2f(QRRect.x + QRRect.width, QRRect.y));
     imagePoints.push_back(cv::Point2f(QRRect.x + QRRect.width, QRRect.y + QRRect.height));
-    imagePoints.push_back(cv::Point2f(QRRect.x, QRRect.y + QRRect.height));
+    imagePoints.push_back(cv::Point2f(QRRect.x, QRRect.y + QRRect.height));*/
     for (auto e : imagePoints)
     {
         circle(frame, e, 3, Scalar(0,0,255), FILLED);
     }
+    circle(frame, imagePoints[0], 3, Scalar(255,0,0), FILLED);
     //object points are measured in millimeters because calibration is done in mm also
     objectPoints.push_back(cv::Point3f(0., 0., 0.));
     objectPoints.push_back(cv::Point3f(78.,0.,0.));
@@ -110,7 +177,7 @@ void getWorldCoordinates(Mat &frame ,Rect &QRRect)
     //uvPoint.at<double>(0,0) = QRRect.x + QRRect.width/2; //got this point using mouse callback
     // uvPoint.at<double>(1,0) = QRRect.y + QRRect.height/2;
 
-        uvPoint.at<double>(0,0) =   320; //got this point using mouse callback
+        uvPoint.at<double>(0,0) = 320; 
         uvPoint.at<double>(1,0) = 480;
         circle(frame, Point(320,480), 4, Scalar(0,255,0), FILLED);
 
@@ -122,27 +189,51 @@ void getWorldCoordinates(Mat &frame ,Rect &QRRect)
         s /= tempMat.at<double>(2,0);
         cv::Mat wcPoint = rotationMatrix.inv() * (s * intrinsics.inv() * uvPoint - tvec);
 
-        Point3f realPoint(wcPoint.at<double>(0, 0), wcPoint.at<double>(1, 0), wcPoint.at<double>(2, 0)); 
+        realPoint.x = wcPoint.at<double>(0, 0);
+        realPoint.y = wcPoint.at<double>(1, 0);
+        realPoint.z = 0;
         cout << realPoint << endl;
     }
     
 }
 
-int main() 
+void drawPlainTrajectory()
+{
+    Mat plain (600, 600, CV_8UC3, Scalar(0,0,0));
+    namedWindow("Plain",WINDOW_AUTOSIZE); 
+    rectangle(plain, Rect(Point(280,280), Point(320,320)), Scalar(255,255,255), FILLED);
+
+    if (trajectory_points.size() >= 2)
+    {
+        for (size_t i = 2; i < trajectory_points.size()-1; i++)
+        {
+            //line(plain, trajectory_points[i-1], trajectory_points[i],Scalar(0,255,0), 2);
+        }
+    }
+    imshow("Plain", plain);
+}
+
+
+int main()
 {
     VideoCapture cap(0); // open the video file for reading
-    if (!cap.isOpened()) return -1;
-    
+    if (!cap.isOpened()) return -1; 
     namedWindow("MyVideo",WINDOW_AUTOSIZE); //create a window called "MyVideo"
     while(1) 
     {        
         Mat frame;
         bool flag =cap.read(frame);
         if (!flag) break;
-        Rect QRRect;
-        recogniseStickersByThreshold(frame,QRRect);
-      //  sendConrolSignal(QRRect, windowSize);
-        getWorldCoordinates(frame, QRRect);
+        recogniseStickersByThreshold(frame);
+        homo(frame);
+
+        //sendConrolSignal(QRRect, windowSize);
+       //getWorldCoordinates(frame);
+
+
+
+
+        //drawPlainTrajectory();
         imshow("MyVideo", frame); //show the frame in "MyVideo" window
         if(waitKey(30) == 27)  break;
     }
