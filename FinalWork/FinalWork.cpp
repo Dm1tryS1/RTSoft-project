@@ -4,15 +4,19 @@
 using namespace cv;
 using namespace std;
 
-const Size windowSize(480, 640);
+const double QRSideLength = 86.0;
+Size windowSize;
 
-vector<Point2d> trajectory_points;
-vector<Point> qrPlain; 
-RotatedRect QRRect;
+vector<Point> trajectory_points;
+vector<Point2f> imagePoints; 
 Point3f realPoint;
-Mat intrinsics, distCoeffs;
+Mat intrinsics ((Mat1d(3, 3) << 1509.713490619002, 0, 699.3177375561561, 
+                                    0, 646.92684674, 247.13654762, 
+                                    0, 0, 1));
+Mat distCoeffs ((Mat1d(1, 5) << 0.1486271150215541, -0.6491785880834027, 1.710689337182047e-05, -0.005221251049022714, -0.1356788841394454));
 
-void Calibration()
+
+void calibration()
 {
     int CHECKERBOARD[2] = {7,5};
     // Создание вектора для хранения векторов 3D точек для каждого изображения шахматной доски
@@ -64,28 +68,11 @@ void Calibration()
     */
 }
 
-void findCoord(Mat &frame)
+void drawImagePoints(Mat& frame)
 {
-    size_t min_dist = sqrt(qrPlain[0].x * qrPlain[0].x + qrPlain[0].y * qrPlain[0].y);
-    size_t min_ind = 0;
-    for (size_t i = 1; i < 4; i++)
-    {
-        size_t dist = sqrt(qrPlain[i].x * qrPlain[i].x + qrPlain[i].y * qrPlain[i].y);
-        if (dist < min_dist)
-        {
-            min_dist = dist;
-            min_ind = i;
-        }
-    }
-
-    for (size_t i = 0; i < min_ind; i++)
-        for (size_t j = 0; j < 3; j++)        
-            swap(qrPlain[j], qrPlain[j+1]);
-
-    for (auto e : qrPlain)
+    for (auto e : imagePoints)
         circle(frame, e, 3, Scalar(0,0,255), FILLED);
-        
-    circle(frame, qrPlain[0], 3, Scalar(255,0,0), FILLED);
+    circle(frame, imagePoints[0], 3, Scalar(255,0,0), FILLED);
 }
 
 void recogniseStickersByThreshold(Mat &frame)
@@ -124,42 +111,36 @@ void recogniseStickersByThreshold(Mat &frame)
 
     if (biggest_contour != -1)
     {
-        QRRect = minAreaRect(contours[biggest_contour]);
         double epsilon = 0.05*arcLength(contours[biggest_contour], true);
         approxPolyDP(contours[biggest_contour], contours[biggest_contour], epsilon, true);
-        qrPlain = contours[biggest_contour];
-        if (qrPlain.size() != 4)
+
+        imagePoints.clear();
+        if (contours[biggest_contour].size() != 4)
         {
-            qrPlain.clear();
             return;
         }
-        findCoord(frame);
+        imagePoints.push_back(contours[biggest_contour][0]);
+        imagePoints.push_back(contours[biggest_contour][1]);
+        imagePoints.push_back(contours[biggest_contour][2]);
+        imagePoints.push_back(contours[biggest_contour][3]);
     }
 }
 
 void homo(Mat &frame)
 {
-    namedWindow("qr",WINDOW_AUTOSIZE);
+    Size homoWindowSize(200, 200);
+    namedWindow("QRHomo",WINDOW_AUTOSIZE);
 
-    vector<Point2f> imagePoints;
     vector<Point2f> objectPoints;
-   
-    if (qrPlain.empty())
-        return;
 
-    imagePoints.push_back(qrPlain[0]);
-    imagePoints.push_back(qrPlain[1]);
-    imagePoints.push_back(qrPlain[2]);
-    imagePoints.push_back(qrPlain[3]);
-
-    objectPoints.push_back(Point2f(400, 0));
-    objectPoints.push_back(Point2f(400, 400*sqrt(2)));
-    objectPoints.push_back(Point2f(0, 400*sqrt(2)));
     objectPoints.push_back(Point2f(0, 0));
+    objectPoints.push_back(Point2f(homoWindowSize.width, 0));
+    objectPoints.push_back(Point2f(homoWindowSize.width, homoWindowSize.height));
+    objectPoints.push_back(Point2f(0, homoWindowSize.height));
 
     Mat h = findHomography(imagePoints, objectPoints, RANSAC);
-    Mat img_perspective(frame.size(), CV_8UC3);
-    warpPerspective(frame, img_perspective,h, frame.size());
+    Mat img_perspective(homoWindowSize, CV_8UC3);
+    warpPerspective(frame, img_perspective, h, homoWindowSize);
 
     Mat k ((Mat1d(3, 3) << -1, -1, -1, -1, 9, -1, -1, -1, -1));
     filter2D(img_perspective, img_perspective, -1, k);
@@ -167,32 +148,46 @@ void homo(Mat &frame)
     vector<Point2f> qrPoints;
     QRCodeDetector detector;
     detector.detect(img_perspective, qrPoints);
-    if (!qrPoints.empty())
+
+    if (h.empty() || qrPoints.empty())
     {
-        for (auto e : qrPoints)
-            circle(img_perspective, e, 3, Scalar(0,0,255), FILLED);
-        circle(img_perspective, qrPoints[0], 3, Scalar(255,0,0), FILLED);
+        return;
     }
-    resizeWindow("qr", 600, 600);
-    imshow("qr", img_perspective);
+
+    for (auto e : qrPoints)
+    {
+        if ((e.x > 10) && (e.x < homoWindowSize.width - 10) &&
+            (e.y > 10) && (e.y < homoWindowSize.height - 10))
+            return;
+    }
+
+    for (auto e : qrPoints)
+    {
+        circle(img_perspective, e, 3, Scalar(0,0,255), FILLED);
+    }
+    circle(img_perspective, qrPoints[0], 3, Scalar(255,0,0), FILLED);
+
+
+    for (size_t i = 0; i < qrPoints.size(); i++)
+    {
+        Mat pt1 = (Mat_<double>(3,1) << qrPoints[i].x, qrPoints[i].y, 1);
+        Mat pt2 = h.inv() * pt1;
+        //pt2 /= 200;
+        imagePoints[i].x = pt2.at<double>(0);
+        imagePoints[i].y = pt2.at<double>(1);
+    }
+
+    imagePoints = qrPoints;
+
+    circle(frame, imagePoints[0], 5, Scalar(255,0,0), FILLED);
+    
+    resizeWindow("qr", homoWindowSize);
+    imshow("QRHomo", img_perspective);
 }
 
 void getWorldCoordinates(Mat &frame)
 {
-    Mat intrinsics ((Mat1d(3, 3) << 1509.713490619002, 0, 699.3177375561561, 
-                                    0, 646.92684674, 247.13654762, 
-                                    0, 0, 1));
-    Mat distCoeffs ((Mat1d(1, 5) << 0.1486271150215541, -0.6491785880834027, 1.710689337182047e-05, -0.005221251049022714, -0.1356788841394454));
-
-    vector<Point2f> imagePoints;
     vector<Point3f> objectPoints;
-      
-    if (qrPlain.empty())
-        return;
-    imagePoints.push_back(qrPlain[0]);
-    imagePoints.push_back(qrPlain[1]);
-    imagePoints.push_back(qrPlain[2]);
-    imagePoints.push_back(qrPlain[3]);
 
     for (auto e : imagePoints)
         circle(frame, e, 3, Scalar(0,0,255), FILLED);
@@ -275,19 +270,30 @@ void drawPlainTrajectory()
 
 int main()
 {
-    Calibration();
-    VideoCapture cap("1.mp4"); // open the video file for reading
-    if (!cap.isOpened()) return -1; 
+    //calibration();
+    VideoCapture cap("../test.mp4");
+
+    if (!cap.isOpened()) { return -1;  } 
+
+    Mat frame;
+    bool flag = cap.read(frame);
+    if (flag) windowSize = frame.size();
+
     namedWindow("MyVideo",WINDOW_AUTOSIZE); //create a window called "MyVideo"
     while(1) 
     {        
-        Mat frame;
-        bool flag =cap.read(frame);
+        flag = cap.read(frame);
         if (!flag) break;
+
         recogniseStickersByThreshold(frame);
-        //homo(frame);
-        getWorldCoordinates(frame);
-        drawPlainTrajectory();
+        if (!imagePoints.empty())
+        {
+            drawImagePoints(frame);
+            homo(frame);
+           //getWorldCoordinates(frame);
+           //drawPlainTrajectory();
+ 
+        }
 
         imshow("MyVideo", frame); //show the frame in "MyVideo" window
         if(waitKey(30) == 27)  break;
