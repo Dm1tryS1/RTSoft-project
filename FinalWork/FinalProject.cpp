@@ -120,7 +120,7 @@ void recogniseStickersByThreshold(Mat &frame)
         imagePoints.push_back(contours[biggest_contour][1]);
         imagePoints.push_back(contours[biggest_contour][2]);
         imagePoints.push_back(contours[biggest_contour][3]);
-
+        //drawPoints(frame , imagePoints);
         homo(frame);
     }
 }
@@ -141,6 +141,7 @@ void homo(Mat &frame)
     Mat h = findHomography(imagePoints, objectPoints, RANSAC);
     Mat img_perspective(homoWindowSize, CV_8UC3);
     warpPerspective(frame, img_perspective, h, homoWindowSize);
+    cvtColor(img_perspective, img_perspective, COLOR_BGR2GRAY);
     threshold(img_perspective, img_perspective, 100, 255, THRESH_BINARY);
 
     Mat k ((Mat1d(3, 3) << -1, -1, -1, -1, 9, -1, -1, -1, -1));
@@ -215,14 +216,14 @@ void getWorldCoordinates(Mat &frame)
 
 bool goodPoint(Point camera_pos)
 {
-    if (camera_pos.x < windowSize.width && camera_pos.y < windowSize.height && camera_pos.x > 0 &&camera_pos.y > 0)
+    if (camera_pos.x < 600 && camera_pos.y < 600 && camera_pos.x > 0 &&camera_pos.y > 0)
     {
         if (trajectory_points.empty())
             return true;
 
         Point last = trajectory_points.back();
         double dst = norm(camera_pos - last);
-        if (dst > 10)
+        if (dst > 10 && dst < 100)
             return true;
     }
     return false;
@@ -234,31 +235,38 @@ void drawPlainTrajectory(Point3f realPoint)
     size_t scale = 2;
     Mat plain (600, 600, CV_8UC3, Scalar(0,0,0));
     namedWindow("Plain",WINDOW_AUTOSIZE); 
+
     rectangle(plain, Rect(QRCentre, Point(QRCentre.x+QRSideLength/scale,QRCentre.y+QRSideLength/scale)), Scalar(255,255,255), FILLED);
+    line(plain, Point(10, 580), Point(10 + QRSideLength/scale, 580), Scalar(255,255,255), 2);
+    line(plain, Point(10 + QRSideLength/scale, 580), Point(10 + QRSideLength/scale, 575), Scalar(255,255,255), 2);
+    putText(plain, "105 mm", Point(5 + QRSideLength/scale, 570), FONT_HERSHEY_PLAIN , 1, Scalar(255,255,255), 1);
+
     Point camera_pos (realPoint.y, realPoint.x);
     camera_pos.x = QRCentre.x+camera_pos.x/scale;
     camera_pos.y = QRCentre.y+camera_pos.y/scale;
     cout<< camera_pos << endl;
-    circle(plain, camera_pos, 4, Scalar(0, 255, 0), FILLED);
 
     if (goodPoint(camera_pos))
+    {
         trajectory_points.push_back(camera_pos);
+        //avg_pts(trajectory_points, 1);
+        circle(plain, camera_pos, 4, Scalar(0, 255, 0), FILLED);
+    }
     
     if (trajectory_points.size() >= 2)
         for (size_t i = 2; i < trajectory_points.size()-1; i++)
+        {
             line(plain, trajectory_points[i-1], trajectory_points[i],Scalar(255,0,0), 1);
+            circle(plain, trajectory_points.back(), 4, Scalar(0, 255, 0), FILLED);
+        }
 
     imshow("Plain", plain);
 }
 
-
-
-
-
 int main()
 {
     calibration();
-    VideoCapture cap("test.mp4");
+    VideoCapture cap("/home/rudakov/Downloads/sample3.mp4");
 
     if (!cap.isOpened()) return -1;
 
