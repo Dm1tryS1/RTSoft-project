@@ -288,3 +288,27 @@ int main()
     }
     return 0;
 }
+{
+    calibration();
+    VideoCapture cap("/home/rudakov/Downloads/sample3.mp4");
+
+    if (!cap.isOpened()) return -1;
+
+    Mat frame;
+    bool flag = cap.read(frame);
+
+    if (flag) windowSize = frame.size();
+
+    namedWindow("MyVideo",WINDOW_AUTOSIZE); //create a window called "MyVideo"
+    while(1) 
+    {        
+        flag = cap.read(frame);
+        if (!flag) break;
+
+        recogniseStickersByThreshold(frame);
+
+        imshow("MyVideo", frame); //show the frame in "MyVideo" window
+        if(waitKey(30) == 27)  break;
+    }
+    return 0;
+}
