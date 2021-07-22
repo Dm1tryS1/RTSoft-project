@@ -1,3 +1,0 @@
-/home/rudakov/RTSoft-project/CMakeFiles/rebuild_cache.dir
-/home/rudakov/RTSoft-project/CMakeFiles/edit_cache.dir
-/home/rudakov/RTSoft-project/CMakeFiles/output.dir
